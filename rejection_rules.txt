@@ -1,0 +1,4 @@
+- Do not create flashcards for one-time configuration steps or step-by-step software setup guides, as this is procedural information users look up when needed rather than memorize.
+- Do not generate flashcards about specific software mechanics, features, or configuration workflows (e.g., how Discord settings work), as the user does not wish to memorize platform-specific operational details.
+- Do not generate flashcards for trivia, pop culture details, or isolated specific facts (like exact car models or engine specifications) that lack broader practical application or educational value.
+- Do not create flashcards for medical or health-related information, definitions, or procedures.

@@ -17,7 +17,8 @@ ANKICONNECT_URL = "http://localhost:8765"
 DECK_NAME = "AI Conversations"
 DATA_PATH = "data"
 MODEL_NAME = "gemini-3-pro-preview"
-REJECTION_RULES_FILE = os.path.join(DATA_PATH, "rejection_rules.txt")
+REJECTION_RULES_FILE = os.path.join("rejection_rules.txt")
+CHECKPOINT_FILE = ".checkpoint.json"
 
 
 def configure_gemini(api_key):
@@ -25,17 +26,121 @@ def configure_gemini(api_key):
     return genai.Client(api_key=api_key)
 
 
+def load_checkpoint():
+    """Load checkpoint from file. Returns the conversation index to start from."""
+    if os.path.exists(CHECKPOINT_FILE):
+        try:
+            with open(CHECKPOINT_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get('conversation_index', 0)
+        except (json.JSONDecodeError, IOError):
+            return 0
+    return 0
+
+
+def save_checkpoint(conversation_index):
+    """Save current progress to checkpoint file."""
+    with open(CHECKPOINT_FILE, 'w') as f:
+        json.dump({'conversation_index': conversation_index}, f)
+
+
+def clear_checkpoint():
+    """Remove checkpoint file when processing is complete."""
+    if os.path.exists(CHECKPOINT_FILE):
+        os.remove(CHECKPOINT_FILE)
+
+
+def load_rejection_rules():
+    """Load rejection rules from file if it exists."""
+    if os.path.exists(REJECTION_RULES_FILE):
+        with open(REJECTION_RULES_FILE, 'r') as f:
+            return f.read().strip()
+    return ""
+
+
+def summarize_rejection(client, flashcards, conversation_text, user_feedback=None):
+    """
+    Ask Gemini to summarize why the user rejected these flashcards.
+    Returns a short rule/tip about what NOT to create flashcards for.
+    
+    Args:
+        client: Gemini client
+        flashcards: List of rejected flashcard dicts
+        conversation_text: The source conversation text
+        user_feedback: Optional user-provided reason for rejection
+    """
+    cards_text = "\n".join([
+        f"- Front: {card['front']}\n  Back: {card['back']}"
+        for card in flashcards
+    ])
+    
+    feedback_section = ""
+    if user_feedback:
+        feedback_section = f"""
+IMPORTANT - The user provided this feedback explaining their rejection:
+"{user_feedback}"
+
+Use this feedback as the PRIMARY basis for generating the rule.
+"""
+    
+    prompt = f"""The user was presented with the following proposed Anki flashcards and REJECTED them:
+
+{cards_text}
+
+These flashcards were generated from this conversation:
+{conversation_text[:2000]}...
+{feedback_section}
+The user didn't want these flashcards added. Please analyze WHY they rejected them and write a SHORT, SPECIFIC rule (1-2 sentences) about what type of information should NOT be turned into flashcards.
+
+Focus on identifying patterns like:
+- Too basic/obvious information
+- Too specific to one-time tasks
+- Information the user likely already knows
+- Overly verbose or poorly formatted cards
+- Context-dependent information that won't be useful later
+
+Return ONLY the rule, nothing else. Be concise and actionable.
+Example: "Don't create flashcards for basic Git commands like 'git status' or 'git add' that any developer would know."
+"""
+
+    try:
+        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error summarizing rejection: {e}")
+        return None
+
+
+def save_rejection_rule(rule):
+    """Append a new rejection rule to the rules file."""
+    dir_name = os.path.dirname(REJECTION_RULES_FILE)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+    with open(REJECTION_RULES_FILE, 'a') as f:
+        f.write(f"- {rule}\n")
+
+
 def analyze_conversation(client, conversation_text):
     """
     Ask Gemini to analyze the conversation and create flashcards if worthwhile.
     Returns a dict with 'has_value' (bool) and 'flashcards' (list).
     """
+    # Load any existing rejection rules
+    rejection_rules = load_rejection_rules()
+    rules_section = ""
+    if rejection_rules:
+        rules_section = f"""
+IMPORTANT - The user has previously rejected flashcards. Learn from these patterns and AVOID creating similar cards:
+{rejection_rules}
+
+"""
+
     prompt = f"""Analyze the following conversation between a user and an AI assistant.
 
 {conversation_text}
 
 I want to remember the things that I learn from AI. Thus I'm planning to add useful concepts to Anki to leverage spaced repetition learning for better long term retention of what I learn.
-
+{rules_section}
 Your task:
 1. Determine if there is information worth remembering (useful facts, commands, solutions, concepts, etc.)
 2. If yes, create Anki flashcards for this information
@@ -118,7 +223,10 @@ def add_flashcard_to_anki(deck_name, front, back, tag):
 
 
 def confirm_flashcards(flashcards, conversation_name):
-    """Ask user to confirm before adding flashcards."""
+    """
+    Ask user to confirm before adding flashcards.
+    Returns a tuple: (accepted: bool, feedback: str or None)
+    """
     print("\n" + "="*80)
     print(f"Conversation: {conversation_name}")
     print(f"Found {len(flashcards)} flashcard(s) to add:")
@@ -131,7 +239,15 @@ def confirm_flashcards(flashcards, conversation_name):
 
     print("\n" + "="*80)
     response = input("\nAdd these flashcards to Anki? (y/n): ").strip().lower()
-    return response == 'y'
+    
+    if response == 'y':
+        return True, None
+    
+    # Ask for optional feedback on rejection
+    print("\n💭 Why did you reject these cards? (Press Enter to skip)")
+    feedback = input("Feedback: ").strip()
+    
+    return False, feedback if feedback else None
 
 
 def process_conversation(client, conversation, deck_name):
@@ -145,7 +261,13 @@ def process_conversation(client, conversation, deck_name):
         return 0
 
     flashcards = analysis['flashcards']
-    if not confirm_flashcards(flashcards, conversation['name']):
+    accepted, feedback = confirm_flashcards(flashcards, conversation['name'])
+    if not accepted:
+        print("    Learning from rejection...")
+        rule = summarize_rejection(client, flashcards, conversation['text'], user_feedback=feedback)
+        if rule:
+            save_rejection_rule(rule)
+            print(f"    📝 Added rule: {rule}")
         print("    Skipped")
         return 0
 
@@ -192,13 +314,27 @@ def main():
         print("\nNo conversations found!")
         return
 
+    # Load checkpoint to resume from where we left off
+    start_index = load_checkpoint()
+    if start_index > 0:
+        print(f"\n📌 Resuming from conversation {start_index + 1} (checkpoint found)")
+    
     # Process all conversations
     print(f"\nProcessing {len(all_conversations)} total conversation(s)...")
     total_added = 0
-    for i, conv in enumerate(all_conversations, 1):
-        print(f"\n[{i}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
+    for i, conv in enumerate(all_conversations):
+        # Skip already processed conversations
+        if i < start_index:
+            continue
+        
+        print(f"\n[{i + 1}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
         total_added += process_conversation(client, conv, DECK_NAME)
+        
+        # Save checkpoint after each conversation
+        save_checkpoint(i + 1)
 
+    # Clear checkpoint when complete
+    clear_checkpoint()
     print("\n" + "="*80)
     print(f"Processing complete! Added {total_added} flashcards total.")
 
