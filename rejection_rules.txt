@@ -2,3 +2,5 @@
 - Do not generate flashcards about specific software mechanics, features, or configuration workflows (e.g., how Discord settings work), as the user does not wish to memorize platform-specific operational details.
 - Do not generate flashcards for trivia, pop culture details, or isolated specific facts (like exact car models or engine specifications) that lack broader practical application or educational value.
 - Do not create flashcards for medical or health-related information, definitions, or procedures.
+- Do not create flashcards that require memorizing specific features, comparisons, data structures, or licensing details of particular APIs or third-party tools.
+- Avoid creating flashcards for simple factual queries or general knowledge lookups (e.g., specific counts, dates, or dimensions) unless the user explicitly indicates an intent to study or memorize the topic.
