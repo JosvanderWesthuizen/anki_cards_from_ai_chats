@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Process Claude conversations and create Anki flashcards using Gemini 3 Pro.
+Process AI conversations and create Anki flashcards using Gemini.
 """
 
 import json
-import os
 import requests
-from pathlib import Path
 import google.generativeai as genai
+
+import claude_formatter
+import google_formatter
+import openai_formatter
 
 # Configuration
 ANKICONNECT_URL = "http://localhost:8765"
-DECK_NAME = "Claude Conversations"
+DECK_NAME = "AI Conversations"
+DATA_PATH = "data"
 
 
 def configure_gemini(api_key):
@@ -20,40 +23,16 @@ def configure_gemini(api_key):
     return genai.GenerativeModel('gemini-3.0-pro-preview')
 
 
-def load_conversations(json_path):
-    """Load conversations from JSON file."""
-    with open(json_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def format_conversation(conversation):
-    """Format a conversation for Gemini analysis."""
-    formatted = f"Conversation: {conversation['name']}\n\n"
-    formatted += f"Summary: {conversation['summary']}\n\n"
-    formatted += "Messages:\n"
-
-    for msg in conversation['chat_messages']:
-        sender = msg['sender']
-        # Extract text from content blocks
-        text_parts = []
-        for content_block in msg.get('content', []):
-            if content_block.get('type') == 'text':
-                text_parts.append(content_block.get('text', ''))
-
-        if text_parts:
-            formatted += f"\n{sender.upper()}:\n{' '.join(text_parts)}\n"
-
-    return formatted
-
-
 def analyze_conversation(model, conversation_text):
     """
     Ask Gemini to analyze the conversation and create flashcards if worthwhile.
     Returns a dict with 'has_value' (bool) and 'flashcards' (list).
     """
-    prompt = f"""Analyze the following conversation between a user and Claude AI.
+    prompt = f"""Analyze the following conversation between a user and an AI assistant.
 
 {conversation_text}
+
+I want to remember the things that I learn from AI. Thus I'm planning to add useful concepts to Anki to leverage spaced repetition learning for better long term retention of what I learn.
 
 Your task:
 1. Determine if there is information worth remembering (useful facts, commands, solutions, concepts, etc.)
@@ -72,6 +51,7 @@ Return your response as JSON with this exact format:
 
 Guidelines for flashcards:
 - Make them concise and focused on one concept
+- Avoid rote learning, include reasoning and explanation
 - Include practical information like commands, configurations, solutions
 - Use clear, specific questions
 - Include context when needed
@@ -82,8 +62,8 @@ Only create flashcards if the information is genuinely useful to remember.
 
     try:
         response = model.generate_content(prompt)
-        # Parse JSON from response
         response_text = response.text.strip()
+
         # Remove markdown code blocks if present
         if response_text.startswith('```json'):
             response_text = response_text[7:]
@@ -91,10 +71,8 @@ Only create flashcards if the information is genuinely useful to remember.
             response_text = response_text[3:]
         if response_text.endswith('```'):
             response_text = response_text[:-3]
-        response_text = response_text.strip()
 
-        result = json.loads(response_text)
-        return result
+        return json.loads(response_text.strip())
     except Exception as e:
         print(f"Error analyzing conversation: {e}")
         return {"has_value": False, "flashcards": []}
@@ -120,10 +98,10 @@ def ensure_deck_exists(deck_name):
     try:
         ankiconnect_request('createDeck', deck=deck_name)
     except:
-        pass  # Deck already exists
+        pass
 
 
-def add_flashcard_to_anki(deck_name, front, back):
+def add_flashcard_to_anki(deck_name, front, back, tag):
     """Add a flashcard to Anki."""
     note = {
         'deckName': deck_name,
@@ -132,14 +110,15 @@ def add_flashcard_to_anki(deck_name, front, back):
             'Front': front,
             'Back': back
         },
-        'tags': ['claude-conversation']
+        'tags': [tag]
     }
     ankiconnect_request('addNote', note=note)
 
 
-def confirm_flashcards(flashcards):
+def confirm_flashcards(flashcards, conversation_name):
     """Ask user to confirm before adding flashcards."""
     print("\n" + "="*80)
+    print(f"Conversation: {conversation_name}")
     print(f"Found {len(flashcards)} flashcard(s) to add:")
     print("="*80)
 
@@ -153,60 +132,73 @@ def confirm_flashcards(flashcards):
     return response == 'y'
 
 
-def main():
-    api_key = "YOUR_API_KEY_HERE" # Coplay key
+def process_conversation(model, conversation, deck_name):
+    """Process a single conversation and return count of flashcards added."""
+    print(f"\n  Analyzing: {conversation['name']}")
 
-    # Configure Gemini
+    analysis = analyze_conversation(model, conversation['text'])
+
+    if not (analysis.get('has_value') and analysis.get('flashcards')):
+        print("    No valuable information found")
+        return 0
+
+    flashcards = analysis['flashcards']
+    if not confirm_flashcards(flashcards, conversation['name']):
+        print("    Skipped")
+        return 0
+
+    added = 0
+    for card in flashcards:
+        try:
+            add_flashcard_to_anki(deck_name, card['front'], card['back'], conversation['tag'])
+            added += 1
+        except Exception as e:
+            print(f"    Error adding flashcard: {e}")
+
+    print(f"    ✓ Added {added} flashcard(s)")
+    return added
+
+
+def main():
+    api_key = "YOUR_API_KEY_HERE"  # Coplay key
+
     print("Configuring Gemini...")
     model = configure_gemini(api_key)
 
-    # Ensure Anki deck exists
     print(f"Ensuring deck '{DECK_NAME}' exists...")
     ensure_deck_exists(DECK_NAME)
 
-    # Find all conversation files
-    claude_data_path = Path("claude_data")
-    conversation_files = list(claude_data_path.glob("*/conversations.json"))
+    # Gather all conversations from all sources
+    all_conversations = []
 
-    if not conversation_files:
-        print("No conversation files found in claude_data folder!")
+    print("\nLoading Claude conversations...")
+    claude_convs = claude_formatter.get_conversations(DATA_PATH)
+    print(f"  Found {len(claude_convs)} Claude conversation(s)")
+    all_conversations.extend(claude_convs)
+
+    print("\nLoading Google conversations...")
+    google_convs = google_formatter.get_conversations(DATA_PATH)
+    print(f"  Found {len(google_convs)} Google conversation(s)")
+    all_conversations.extend(google_convs)
+
+    print("\nLoading OpenAI conversations...")
+    openai_convs = openai_formatter.get_conversations(DATA_PATH)
+    print(f"  Found {len(openai_convs)} OpenAI conversation(s)")
+    all_conversations.extend(openai_convs)
+
+    if not all_conversations:
+        print("\nNo conversations found!")
         return
 
-    print(f"\nFound {len(conversation_files)} conversation file(s)")
-
-    # Process each file
-    for file_path in conversation_files:
-        print(f"\nProcessing: {file_path}")
-        conversations = load_conversations(file_path)
-        print(f"  Loaded {len(conversations)} conversations")
-
-        for i, conversation in enumerate(conversations, 1):
-            print(f"\n  [{i}/{len(conversations)}] Analyzing: {conversation['name']}")
-
-            # Format and analyze conversation
-            conv_text = format_conversation(conversation)
-            analysis = analyze_conversation(model, conv_text)
-
-            if analysis.get('has_value') and analysis.get('flashcards'):
-                flashcards = analysis['flashcards']
-                if confirm_flashcards(flashcards):
-                    for card in flashcards:
-                        try:
-                            add_flashcard_to_anki(
-                                DECK_NAME,
-                                card['front'],
-                                card['back']
-                            )
-                        except Exception as e:
-                            print(f"    Error adding flashcard: {e}")
-                    print(f"    ✓ Added {len(flashcards)} flashcard(s)")
-                else:
-                    print("    Skipped")
-            else:
-                print("    No valuable information found")
+    # Process all conversations
+    print(f"\nProcessing {len(all_conversations)} total conversation(s)...")
+    total_added = 0
+    for i, conv in enumerate(all_conversations, 1):
+        print(f"\n[{i}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
+        total_added += process_conversation(model, conv, DECK_NAME)
 
     print("\n" + "="*80)
-    print("Processing complete!")
+    print(f"Processing complete! Added {total_added} flashcards total.")
 
 
 if __name__ == "__main__":
