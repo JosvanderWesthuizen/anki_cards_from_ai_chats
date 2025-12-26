@@ -6,7 +6,10 @@ Process AI conversations and create Anki flashcards using Gemini.
 import json
 import os
 import requests
+from dotenv import load_dotenv
 from google import genai
+
+load_dotenv()
 
 import claude_formatter
 import google_formatter
@@ -284,7 +287,11 @@ def process_conversation(client, conversation, deck_name):
 
 
 def main():
-    api_key = "YOUR_API_KEY_HERE"  # Coplay key
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("Error: GEMINI_API_KEY environment variable not set.")
+        print("Create a .env file with: GEMINI_API_KEY=your_api_key_here")
+        return
 
     print("Configuring Gemini...")
     client = configure_gemini(api_key)
