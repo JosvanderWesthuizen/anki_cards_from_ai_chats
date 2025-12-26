@@ -4,8 +4,9 @@ Process AI conversations and create Anki flashcards using Gemini.
 """
 
 import json
+import os
 import requests
-import google.generativeai as genai
+from google import genai
 
 import claude_formatter
 import google_formatter
@@ -15,15 +16,16 @@ import openai_formatter
 ANKICONNECT_URL = "http://localhost:8765"
 DECK_NAME = "AI Conversations"
 DATA_PATH = "data"
+MODEL_NAME = "gemini-3-pro-preview"
+REJECTION_RULES_FILE = os.path.join(DATA_PATH, "rejection_rules.txt")
 
 
 def configure_gemini(api_key):
     """Configure Gemini API."""
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-3.0-pro-preview')
+    return genai.Client(api_key=api_key)
 
 
-def analyze_conversation(model, conversation_text):
+def analyze_conversation(client, conversation_text):
     """
     Ask Gemini to analyze the conversation and create flashcards if worthwhile.
     Returns a dict with 'has_value' (bool) and 'flashcards' (list).
@@ -61,7 +63,7 @@ Only create flashcards if the information is genuinely useful to remember.
 """
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
         response_text = response.text.strip()
 
         # Remove markdown code blocks if present
@@ -132,11 +134,11 @@ def confirm_flashcards(flashcards, conversation_name):
     return response == 'y'
 
 
-def process_conversation(model, conversation, deck_name):
+def process_conversation(client, conversation, deck_name):
     """Process a single conversation and return count of flashcards added."""
     print(f"\n  Analyzing: {conversation['name']}")
 
-    analysis = analyze_conversation(model, conversation['text'])
+    analysis = analyze_conversation(client, conversation['text'])
 
     if not (analysis.get('has_value') and analysis.get('flashcards')):
         print("    No valuable information found")
@@ -163,7 +165,7 @@ def main():
     api_key = "YOUR_API_KEY_HERE"  # Coplay key
 
     print("Configuring Gemini...")
-    model = configure_gemini(api_key)
+    client = configure_gemini(api_key)
 
     print(f"Ensuring deck '{DECK_NAME}' exists...")
     ensure_deck_exists(DECK_NAME)
@@ -195,7 +197,7 @@ def main():
     total_added = 0
     for i, conv in enumerate(all_conversations, 1):
         print(f"\n[{i}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
-        total_added += process_conversation(model, conv, DECK_NAME)
+        total_added += process_conversation(client, conv, DECK_NAME)
 
     print("\n" + "="*80)
     print(f"Processing complete! Added {total_added} flashcards total.")
