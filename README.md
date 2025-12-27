@@ -145,6 +145,8 @@ data/
 ]
 ```
 
+After about 2 years of AI usage, I had around 6K conversations. Your total will be shown when you run the script.
+
 ## Usage
 
 1. Ensure Anki is running with AnkiConnect enabled
