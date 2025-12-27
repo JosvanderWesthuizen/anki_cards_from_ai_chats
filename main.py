@@ -31,6 +31,8 @@ INTERESTS = [
     "Programming",
     "Science",
     "Physics",
+    "Linguistics/Vocabulary",
+    "History"
 ]
 
 
