@@ -23,6 +23,16 @@ MODEL_NAME = "gemini-3-pro-preview"
 REJECTION_RULES_FILE = os.path.join("rejection_rules.txt")
 CHECKPOINT_FILE = ".checkpoint.json"
 
+# User interests - used to guide flashcard creation
+INTERESTS = [
+    "Mathematics",
+    "AI",
+    "Machine Learning",
+    "Programming",
+    "Science",
+    "Physics",
+]
+
 
 def configure_gemini(api_key):
     """Configure Gemini API."""
@@ -61,7 +71,7 @@ def load_rejection_rules():
     return ""
 
 
-def summarize_rejection(client, flashcards, conversation_text, user_feedback=None):
+def summarize_rejection(client, flashcards, conversation_text, user_feedback=None, existing_rules=None):
     """
     Ask Gemini to summarize why the user rejected these flashcards.
     Returns a short rule/tip about what NOT to create flashcards for.
@@ -71,6 +81,7 @@ def summarize_rejection(client, flashcards, conversation_text, user_feedback=Non
         flashcards: List of rejected flashcard dicts
         conversation_text: The source conversation text
         user_feedback: Optional user-provided reason for rejection
+        existing_rules: Optional string of existing rejection rules to avoid duplicates
     """
     cards_text = "\n".join([
         f"- Front: {card['front']}\n  Back: {card['back']}"
@@ -86,6 +97,16 @@ IMPORTANT - The user provided this feedback explaining their rejection:
 Use this feedback as the PRIMARY basis for generating the rule.
 """
     
+    existing_rules_section = ""
+    if existing_rules:
+        existing_rules_section = f"""
+EXISTING RULES (do NOT duplicate these - create a new, specific rule that is different):
+{existing_rules}
+
+"""
+
+    interests_text = ", ".join(INTERESTS)
+    
     prompt = f"""The user was presented with the following proposed Anki flashcards and REJECTED them:
 
 {cards_text}
@@ -93,6 +114,8 @@ Use this feedback as the PRIMARY basis for generating the rule.
 These flashcards were generated from this conversation:
 {conversation_text[:2000]}...
 {feedback_section}
+The user's interests are: {interests_text}
+{existing_rules_section}
 The user didn't want these flashcards added. Please analyze WHY they rejected them and write a SHORT, SPECIFIC rule (1-2 sentences) about what type of information should NOT be turned into flashcards.
 
 Focus on identifying patterns like:
@@ -102,7 +125,7 @@ Focus on identifying patterns like:
 - Overly verbose or poorly formatted cards
 - Context-dependent information that won't be useful later
 
-Return ONLY the rule, nothing else. Be concise and actionable.
+Return ONLY the rule, nothing else. Be concise and actionable. Make sure your rule is DIFFERENT from the existing rules listed above.
 Example: "Don't create flashcards for basic Git commands like 'git status' or 'git add' that any developer would know."
 """
 
@@ -138,11 +161,15 @@ IMPORTANT - The user has previously rejected flashcards. Learn from these patter
 
 """
 
+    interests_text = ", ".join(INTERESTS)
+    
     prompt = f"""Analyze the following conversation between a user and an AI assistant.
 
 {conversation_text}
 
 I want to remember the things that I learn from AI. Thus I'm planning to add useful concepts to Anki to leverage spaced repetition learning for better long term retention of what I learn.
+
+My interests are: {interests_text}. Prioritize creating flashcards for information related to these topics.
 {rules_section}
 Your task:
 1. Determine if there is information worth remembering (useful facts, commands, solutions, concepts, etc.)
@@ -267,7 +294,8 @@ def process_conversation(client, conversation, deck_name):
     accepted, feedback = confirm_flashcards(flashcards, conversation['name'])
     if not accepted:
         print("    Learning from rejection...")
-        rule = summarize_rejection(client, flashcards, conversation['text'], user_feedback=feedback)
+        existing_rules = load_rejection_rules()
+        rule = summarize_rejection(client, flashcards, conversation['text'], user_feedback=feedback, existing_rules=existing_rules)
         if rule:
             save_rejection_rule(rule)
             print(f"    📝 Added rule: {rule}")

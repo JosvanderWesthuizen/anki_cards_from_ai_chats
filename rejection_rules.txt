@@ -1,63 +1,45 @@
-- Do not create flashcards for one-time configuration steps or step-by-step software setup guides, as this is procedural information users look up when needed rather than memorize.
+- Do not create flashcards based on information, quotes, or concepts that are not explicitly present in the provided conversation text.
+- Do not create flashcards for one-time configuration steps, step-by-step software setup guides, specific CLI commands, keyboard shortcuts, or configuration format syntax (TOML, JSON, YAML), as this is procedural information users look up when needed rather than memorize.
 - Do not generate flashcards about specific software mechanics, features, or configuration workflows (e.g., how Discord settings work), as the user does not wish to memorize platform-specific operational details.
-- Do not generate flashcards for trivia, pop culture details, or isolated specific facts (like exact car models or engine specifications) that lack broader practical application or educational value.
-- Do not create flashcards for medical or health-related information, definitions, or procedures.
+- Do not generate flashcards for trivia, pop culture details, isolated specific facts (like exact car models or engine specifications), historical trivia, biographical details, or anecdotes that lack broader practical application or educational value.
+- Do not create flashcards for medical, health-related, or deep physiological information, definitions, procedures, or clinical terminology.
 - Do not create flashcards that require memorizing specific features, comparisons, data structures, or licensing details of particular APIs or third-party tools.
 - Avoid creating flashcards for simple factual queries or general knowledge lookups (e.g., specific counts, dates, or dimensions) unless the user explicitly indicates an intent to study or memorize the topic.
 - Do not create flashcards covering the logistics of job applications, recruiting policies, or interview strategies, as this information is situational and not needed for long-term retention.
-- Do not create flashcards based on information, quotes, or concepts that are not explicitly present in the provided conversation text.
 - Do not generate flashcards for general theoretical concepts or high-level strategies when the user specifically requests a practical implementation or code script.
-- Do not generate flashcards that ask for specific command-line interface (CLI) commands, flags, or syntax.
-- Do not create flashcards for standard programming language syntax (e.g., f-strings, `__repr__`) or specific implementation details of a code snippet that are context-dependent and not transferable concepts.
+- Do not create flashcards for standard programming language syntax (e.g., f-strings, `__repr__`), built-in library mechanics, specific exception types, fundamental syntax rules, or specific implementation details of a code snippet that are context-dependent and not transferable concepts.
 - Do not create flashcards defining generic system error codes (like `SIGSEGV`) or standard debugging heuristics from crash logs, as this is reference information for immediate troubleshooting rather than material for long-term memorization.
 - Do not generate flashcards for general conceptual comparisons, argumentative points, or illustrative statistics (like branching factors) that serve to answer a broad curiosity question, as these are meant to be understood contextually rather than memorized.
 - Do not generate text-only flashcards for visual concepts (like identifying specific musical symbols) where the card fails to include the necessary image for recognition.
 - Do not create flashcards for specific legal advice, contractual nuances, or jurisdictional regulations intended for immediate business application, as the user likely needs to reference this information for a task rather than memorize it for the long term.
-- Do not create flashcards for general domain theory, basic mechanics, or standard definitions (e.g., physics of aspect ratios, how kite lines connect) that a practitioner in the field would likely already know.
+- Do not create flashcards for general domain theory, basic mechanics, standard definitions, or fundamental techniques (e.g., physics of aspect ratios, what an Armbar is) that a practitioner in the field would likely already know.
 - Do not generate flashcards that test complex philosophical nuances or detailed theoretical definitions when the user's query is a simple factual or biographical question.
-- Avoid creating flashcards for fundamental syntax rules or standard programming best practices (such as JSON escaping or serialization vs. regex) that are considered prerequisite knowledge for developers.
 - Do not create flashcards for general business logic, subjective lists of factors, or common-sense reasoning (e.g., why revenue matters for acquisition) that are better understood conceptually than memorized.
-- Do not create flashcards for general definitions, acronym expansions, or high-level conceptual explanations that provide background context, as the user likely already possesses this baseline knowledge.
-- Do not create flashcards that test specific historical trivia, biographical details, or anecdotes about famous companies and executives (e.g., names, dates, or specific past roles), as this is illustrative context rather than actionable knowledge.
 - Do not create flashcards regarding internal engine implementation details or underlying technical mechanics (such as specific internal scenes for `DontDestroyOnLoad` or Prefab Mode) that serve as trivia rather than actionable development knowledge.
-- Do not create flashcards based on illustrative analogies, speculative future trends, or tangential topics (like LLM mechanics) that deviate from the user's primary requested subject matter (e.g., historical RAM evolution).
+- Do not create flashcards based on illustrative analogies, speculative future trends, or tangential topics that deviate from the user's primary requested subject matter.
 - Do not create flashcards about architectural principles or tool implementation details (e.g., underlying event systems) when the user's request is strictly to summarize specific data logs or reproduce a specific workflow.
-- Do not generate flashcards containing specific troubleshooting scenarios, error causes, or technical details (such as signature verification failures) that are not explicitly mentioned in the provided source text.
-- Do not create flashcards for definitions or basic mechanics of fundamental techniques (e.g., describing what an Armbar is) that are obvious to anyone practicing the domain.
 - Do not create flashcards covering airline deals, pricing models, or loyalty program valuations, as the user does not wish to memorize consumer travel advice.
 - Do not generate meta-flashcards regarding the learning format or tools themselves (such as the definition, etymology, or cognitive theory of "cloze deletion"); focus strictly on the educational subject matter discussed in the conversation history.
-- Do not generate flashcards containing specific facts, methodologies, or definitions that are not explicitly present in the provided source text (e.g., do not use external knowledge to answer the user's questions if the answer isn't in the transcript).
-- Do not create flashcards for common sense advice or intuitive concepts that are self-evident and do not require active memorization.
-- Do not create flashcards for concepts that are considered common sense or general knowledge (such as the fact that cramming is ineffective compared to spaced practice), even if they are discussed in the text.
-- Do not create flashcards for general knowledge, trivia, or introductory summary facts that are likely to be retained easily without the need for spaced repetition.
+- Do not create flashcards for common sense advice, intuitive concepts, or general knowledge that are self-evident and do not require active memorization.
 - Do not create flashcards defining high-level concepts or broad introductory topics within a domain (e.g., "What is Neurosymbolic AI?") when the user is already an established expert in that field.
 - Do not generate flashcards for subjective advice, social theories, or "soft topics" (such as productivity tips or book recommendations) that cannot be scientifically verified.
 - Do not create flashcards for specific historical topics, monuments, or narratives unless explicitly requested, as the user considers this information general context rather than material for long-term memorization.
 - Do not generate flashcards for fundamental computer science concepts or general theoretical justifications (like the logic behind zero-based indexing) that lack deep, concrete technical specifics.
 - Do not create flashcards that focus on rote memorization of isolated facts, such as specific dates, names of founders, etymologies, or simple definitions.
 - Do not create flashcards for definitions, mechanics, or concepts related to specific financial terms (like LOC), as the user seeks immediate explanation rather than long-term memorization of this domain knowledge.
-- Do not create flashcards for specific syntax rules of configuration formats (like TOML, JSON, or YAML) or one-off troubleshooting of syntax errors caused by typos, as this information is better looked up than memorized.
 - Do not create flashcards for one-off administrative tasks or specific transactional procedures (such as banking transfer details) that do not require long-term memorization.
-- Do not create flashcards regarding general consumer electronics trivia or device management, such as phone battery life mechanics.
+- Do not create flashcards regarding general consumer electronics trivia, phone battery life mechanics, or device management.
 - Do not generate flashcards related to dress codes, fashion advice, or clothing etiquette.
 - Do not create flashcards about DMARC technical specifications, configuration tags (such as `p`, `sp`, `rua`), or DNS record details.
-- Do not generate flashcards for specific, niche trivia or isolated real-world applications of scientific concepts (like the aerodynamics of car windows) that lack broad utility.
 - Do not create flashcards about macOS-specific system behaviors, file paths (e.g., `/Library/Perl`), or OS-dependent tools (like Homebrew) when the core command concepts apply generally to other Unix-like systems.
-- Do not create flashcards that require memorizing specific raw numbers, such as exact parameter counts, layer depths, or architectural dimensions.
+- Do not create flashcards that require memorizing specific raw numbers, exact parameter counts, layer depths, or architectural dimensions.
 - Do not generate flashcards regarding specific library API syntax, argument names (like `inputs_embeds`), or granular implementation details, as this information is ephemeral and not conceptually timeless.
-- Do not generate flashcards for fundamental concepts or standard definitions (such as basic Git command differences) that are likely considered elementary or obvious to the user.
-- Do not create flashcards regarding standard programming language syntax, built-in library mechanics, or specific exception types (e.g., Python Enum instantiation errors), as these details are considered too granular and trivial to memorize.
-- Do not generate flashcards for general software terminology or high-level concepts that are intuitive, self-explanatory, and easily retained without spaced repetition (e.g., definitions where the name explains the function).
 - Do not generate flashcards containing details specific to particular applications, platforms, or marketplaces (such as specific submission processes or ecosystem names).
-- Avoid creating flashcards covering deep physiological mechanisms, scientific definitions (e.g., Joules, specific chemical processes), or clinical lab methods when the user is asking about general consumer technology.
 - Do not generate flashcards covering the technical history or usage of the `www` prefix, or specific DNS configuration details like CNAME records and naked domains.
 - Do not create flashcards covering specific, rapidly changing industry benchmarks, datasets, or current implementation workflows, as this information is ephemeral and likely to become obsolete quickly.
-- Avoid creating flashcards for specific naming conventions, syntax characters, or niche tool behaviors (such as Unity's tilde folder suffix) that are implementation details better looked up when needed.
 - Do not generate flashcards covering specific technical implementation details (like static site architecture mechanics), detailed maintenance justifications, or specific commercial pricing patterns, as this information is considered too niche and circumstantial for long-term memorization.
 - Do not create flashcards for common idioms, basic definitions, or simple linguistic variations that are self-explanatory or easily remembered after a single exposure.
 - Do not create flashcards focusing on granular architectural implementation details (like specific input masking techniques or alignment handling mechanisms); instead, focus on high-level concepts and core objectives.
-- Do not create flashcards for tangential trivia, specific historical details (like licensing reasons), or exact command syntax that deviates from the main high-level concepts requested.
 - Do not create flashcards for broad conceptual explanations, high-level design philosophies, or complex "why" questions where the answer is a qualitative narrative rather than a precise, discrete fact.
-- Do not create flashcards regarding specific keyboard shortcuts, hotkeys, or key bindings for software navigation and commands.
 - Do not create flashcards covering topics related to video games, entertainment media, or leisure activities.
-- Do not create flashcards focusing on deep physiological mechanisms, clinical terminology, or cellular-level biology (e.g., specific ion accumulation or structural heart adaptations) that are too academic for a general user.
+- Do not create flashcards regarding specific technical limits, hardcoded constraints, or rules defined in specifications (such as maximum tool calls).
