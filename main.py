@@ -10,6 +10,7 @@ import requests
 from dotenv import load_dotenv
 from google import genai
 from openai import OpenAI
+from utils import BedrockClient, BEDROCK_REGION
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ DECK_NAME_UNFILTERED = "AI Conversations Unfiltered"
 DATA_PATH = "data"
 GEMINI_MODEL_NAME = "gemini-3-pro-preview"
 OPENAI_MODEL_NAME = "gpt-5.2"
+BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 REJECTION_RULES_FILE = os.path.join("rejection_rules.txt")
 CHECKPOINT_FILE = ".checkpoint.json"
 
@@ -48,6 +50,11 @@ def configure_gemini(api_key):
 def configure_openai(api_key):
     """Configure OpenAI API."""
     return OpenAI(api_key=api_key)
+
+
+def configure_bedrock(api_key, region=BEDROCK_REGION):
+    """Configure Amazon Bedrock client with API key."""
+    return BedrockClient(api_key=api_key, region=region)
 
 
 def load_checkpoint():
@@ -82,16 +89,16 @@ def load_rejection_rules():
     return ""
 
 
-def summarize_rejection(client, flashcards, conversation_text, use_openai=False, user_feedback=None, existing_rules=None):
+def summarize_rejection(client, flashcards, conversation_text, provider="gemini", user_feedback=None, existing_rules=None):
     """
     Ask the AI to summarize why the user rejected these flashcards.
     Returns a short rule/tip about what NOT to create flashcards for.
     
     Args:
-        client: Gemini or OpenAI client
+        client: Gemini, OpenAI, or Bedrock client
         flashcards: List of rejected flashcard dicts
         conversation_text: The source conversation text
-        use_openai: Whether to use OpenAI instead of Gemini
+        provider: Which AI provider to use ("gemini", "openai", or "bedrock")
         user_feedback: Optional user-provided reason for rejection
         existing_rules: Optional string of existing rejection rules to avoid duplicates
     """
@@ -141,19 +148,21 @@ Return ONLY the rule, nothing else. Be concise and actionable. Make sure your ru
 Example: "Don't create flashcards for basic Git commands like 'git status' or 'git add' that any developer would know."
 """
 
-    try:
-        if use_openai:
-            response = client.chat.completions.create(
-                model=OPENAI_MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content.strip()
-        else:
-            response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
-            return response.text.strip()
-    except Exception as e:
-        print(f"Error summarizing rejection: {e}")
-        return None
+    if provider == "openai":
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    elif provider == "bedrock":
+        response = client.converse(
+            modelId=BEDROCK_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt}]}]
+        )
+        return response["output"]["message"]["content"][0]["text"].strip()
+    else:
+        response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
+        return response.text.strip()
 
 
 def save_rejection_rule(rule):
@@ -165,7 +174,7 @@ def save_rejection_rule(rule):
         f.write(f"- {rule}\n")
 
 
-def analyze_conversation(client, conversation_text, use_openai=False):
+def analyze_conversation(client, conversation_text, provider="gemini"):
     """
     Ask the AI to analyze the conversation and create flashcards if worthwhile.
     Returns a dict with 'has_value' (bool) and 'flashcards' (list).
@@ -216,29 +225,38 @@ Guidelines for flashcards:
 Only create flashcards if the information is genuinely useful to remember.
 """
 
-    try:
-        if use_openai:
-            response = client.chat.completions.create(
-                model=OPENAI_MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            response_text = response.choices[0].message.content.strip()
-        else:
-            response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
-            response_text = response.text.strip()
+    if provider == "openai":
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        response_text = response.choices[0].message.content.strip()
+    elif provider == "bedrock":
+        response = client.converse(
+            modelId=BEDROCK_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt}]}]
+        )
+        response_text = response["output"]["message"]["content"][0]["text"].strip()
+    else:
+        response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
+        response_text = response.text.strip()
 
-        # Remove markdown code blocks if present
-        if response_text.startswith('```json'):
-            response_text = response_text[7:]
-        if response_text.startswith('```'):
-            response_text = response_text[3:]
-        if response_text.endswith('```'):
-            response_text = response_text[:-3]
+    # Remove markdown code blocks if present
+    if response_text.startswith('```json'):
+        response_text = response_text[7:]
+    if response_text.startswith('```'):
+        response_text = response_text[3:]
+    if response_text.endswith('```'):
+        response_text = response_text[:-3]
 
-        return json.loads(response_text.strip())
-    except Exception as e:
-        print(f"Error analyzing conversation: {e}")
-        return {"has_value": False, "flashcards": []}
+    # Extract JSON object by finding the first { and last }
+    response_text = response_text.strip()
+    start_idx = response_text.find('{')
+    end_idx = response_text.rfind('}')
+    if start_idx != -1 and end_idx != -1:
+        response_text = response_text[start_idx:end_idx + 1]
+
+    return json.loads(response_text)
 
 
 def ankiconnect_request(action, **params):
@@ -318,11 +336,11 @@ def confirm_flashcards(flashcards, conversation_name):
     return False, feedback if feedback else None
 
 
-def process_conversation(client, conversation, deck_name, use_openai=False, force_mode=False):
+def process_conversation(client, conversation, deck_name, provider="gemini", force_mode=False):
     """Process a single conversation and return count of flashcards added."""
     print(f"\n  Analyzing: {conversation['name']}")
 
-    analysis = analyze_conversation(client, conversation['text'], use_openai=use_openai)
+    analysis = analyze_conversation(client, conversation['text'], provider=provider)
 
     if not (analysis.get('has_value') and analysis.get('flashcards')):
         print("    No valuable information found")
@@ -339,7 +357,7 @@ def process_conversation(client, conversation, deck_name, use_openai=False, forc
     if not accepted:
         print("    Learning from rejection...")
         existing_rules = load_rejection_rules()
-        rule = summarize_rejection(client, flashcards, conversation['text'], use_openai=use_openai, user_feedback=feedback, existing_rules=existing_rules)
+        rule = summarize_rejection(client, flashcards, conversation['text'], provider=provider, user_feedback=feedback, existing_rules=existing_rules)
         if rule:
             save_rejection_rule(rule)
             print(f"    📝 Added rule: {rule}")
@@ -360,10 +378,16 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Process AI conversations and create Anki flashcards."
     )
-    parser.add_argument(
+    provider_group = parser.add_mutually_exclusive_group()
+    provider_group.add_argument(
         "-openai",
         action="store_true",
-        help="Use OpenAI (GPT-4o) instead of Gemini for analysis"
+        help="Use OpenAI (GPT-5.2) instead of Gemini for analysis"
+    )
+    provider_group.add_argument(
+        "-bedrock",
+        action="store_true",
+        help="Use Claude Sonnet 4.5 via Amazon Bedrock for analysis"
     )
     parser.add_argument(
         "-f",
@@ -375,8 +399,15 @@ def parse_args():
 
 def main():
     args = parse_args()
-    use_openai = args.openai
     force_mode = args.f
+    
+    # Determine provider
+    if args.openai:
+        provider = "openai"
+    elif args.bedrock:
+        provider = "bedrock"
+    else:
+        provider = "gemini"
     
     # Determine which deck to use
     deck_name = DECK_NAME_UNFILTERED if force_mode else DECK_NAME
@@ -390,7 +421,7 @@ def main():
     print("✓ Anki is running")
 
     # Configure the appropriate AI client
-    if use_openai:
+    if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             print("Error: OPENAI_API_KEY environment variable not set.")
@@ -398,6 +429,14 @@ def main():
             return
         print("Configuring OpenAI...")
         client = configure_openai(api_key)
+    elif provider == "bedrock":
+        api_key = os.getenv("BEDROCK_API_KEY")
+        if not api_key:
+            print("Error: BEDROCK_API_KEY environment variable not set.")
+            print("Generate an API key at: https://console.aws.amazon.com/bedrock/")
+            return
+        print("Configuring Amazon Bedrock...")
+        client = configure_bedrock(api_key)
     else:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -448,7 +487,7 @@ def main():
             continue
         
         print(f"\n[{i + 1}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
-        total_added += process_conversation(client, conv, deck_name, use_openai=use_openai, force_mode=force_mode)
+        total_added += process_conversation(client, conv, deck_name, provider=provider, force_mode=force_mode)
         
         # Save checkpoint after each conversation
         save_checkpoint(i + 1, total_added)
