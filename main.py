@@ -42,21 +42,21 @@ def configure_gemini(api_key):
 
 
 def load_checkpoint():
-    """Load checkpoint from file. Returns the conversation index to start from."""
+    """Load checkpoint from file. Returns tuple of (conversation_index, cards_added)."""
     if os.path.exists(CHECKPOINT_FILE):
         try:
             with open(CHECKPOINT_FILE, 'r') as f:
                 data = json.load(f)
-                return data.get('conversation_index', 0)
+                return data.get('conversation_index', 0), data.get('cards_added', 0)
         except (json.JSONDecodeError, IOError):
-            return 0
-    return 0
+            return 0, 0
+    return 0, 0
 
 
-def save_checkpoint(conversation_index):
+def save_checkpoint(conversation_index, cards_added):
     """Save current progress to checkpoint file."""
     with open(CHECKPOINT_FILE, 'w') as f:
-        json.dump({'conversation_index': conversation_index}, f)
+        json.dump({'conversation_index': conversation_index, 'cards_added': cards_added}, f)
 
 
 def clear_checkpoint():
@@ -232,6 +232,18 @@ def ankiconnect_request(action, **params):
     return result.get('result')
 
 
+def check_anki_running():
+    """Check if Anki is running by attempting to connect to AnkiConnect."""
+    try:
+        ankiconnect_request('version')
+        return True
+    except requests.exceptions.ConnectionError:
+        return False
+    except Exception:
+        # If we get any other error, AnkiConnect responded so Anki is running
+        return True
+
+
 def ensure_deck_exists(deck_name):
     """Ensure the Anki deck exists."""
     try:
@@ -306,17 +318,22 @@ def process_conversation(client, conversation, deck_name):
 
     added = 0
     for card in flashcards:
-        try:
-            add_flashcard_to_anki(deck_name, card['front'], card['back'], conversation['tag'])
-            added += 1
-        except Exception as e:
-            print(f"    Error adding flashcard: {e}")
+        add_flashcard_to_anki(deck_name, card['front'], card['back'], conversation['tag'])
+        added += 1
 
     print(f"    ✓ Added {added} flashcard(s)")
     return added
 
 
 def main():
+    # Check if Anki is running first
+    print("Checking if Anki is running...")
+    if not check_anki_running():
+        print("Error: Anki is not running.")
+        print("Please start Anki and ensure the AnkiConnect add-on is installed.")
+        return
+    print("✓ Anki is running")
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("Error: GEMINI_API_KEY environment variable not set.")
@@ -352,13 +369,12 @@ def main():
         return
 
     # Load checkpoint to resume from where we left off
-    start_index = load_checkpoint()
+    start_index, total_added = load_checkpoint()
     if start_index > 0:
-        print(f"\n📌 Resuming from conversation {start_index + 1} (checkpoint found)")
+        print(f"\n📌 Resuming from conversation {start_index + 1} (checkpoint found, {total_added} cards added so far)")
     
     # Process all conversations
     print(f"\nProcessing {len(all_conversations)} total conversation(s)...")
-    total_added = 0
     for i, conv in enumerate(all_conversations):
         # Skip already processed conversations
         if i < start_index:
@@ -368,7 +384,7 @@ def main():
         total_added += process_conversation(client, conv, DECK_NAME)
         
         # Save checkpoint after each conversation
-        save_checkpoint(i + 1)
+        save_checkpoint(i + 1, total_added)
 
     # Clear checkpoint when complete
     clear_checkpoint()

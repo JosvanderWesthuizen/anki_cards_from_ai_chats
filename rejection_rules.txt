@@ -44,3 +44,6 @@
 - Do not create flashcards covering topics related to video games, entertainment media, or leisure activities.
 - Do not create flashcards regarding specific technical limits, hardcoded constraints, or rules defined in specifications (such as maximum tool calls).
 - Do not create flashcards covering the Model Context Protocol (MCP), including its definitions, purpose, capabilities, or integration details.
+- Do not create flashcards that define standard technical terminology or common engineering concepts (e.g., "headless", "determinism"), as the user possesses sufficient domain expertise to find such definitions trivial.
+- Do not create flashcards for basic heuristics, rough approximations, or standard rules of thumb (e.g., token-to-character ratios) that are considered trivial, entry-level knowledge for a practitioner in the field.
+- Do not generate flashcards for niche, vendor-specific hardware features or obscure optimization technologies (like specific GPU services or driver-level tools) that are considered too random or peripheral for general long-term memorization.
