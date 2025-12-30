@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Process AI conversations and create Anki flashcards using Gemini.
+Process AI conversations and create Anki flashcards using Gemini or OpenAI.
 """
 
+import argparse
 import json
 import os
 import requests
 from dotenv import load_dotenv
 from google import genai
+from openai import OpenAI
 
 load_dotenv()
 
@@ -18,8 +20,10 @@ import openai_formatter
 # Configuration
 ANKICONNECT_URL = "http://localhost:8765"
 DECK_NAME = "AI Conversations"
+DECK_NAME_UNFILTERED = "AI Conversations Unfiltered"
 DATA_PATH = "data"
-MODEL_NAME = "gemini-3-pro-preview"
+GEMINI_MODEL_NAME = "gemini-3-pro-preview"
+OPENAI_MODEL_NAME = "gpt-5.2"
 REJECTION_RULES_FILE = os.path.join("rejection_rules.txt")
 CHECKPOINT_FILE = ".checkpoint.json"
 
@@ -31,7 +35,7 @@ INTERESTS = [
     "Programming",
     "Science",
     "Physics",
-    "Linguistics/Vocabulary",
+    "Language/Vocabulary",
     "History"
 ]
 
@@ -39,6 +43,11 @@ INTERESTS = [
 def configure_gemini(api_key):
     """Configure Gemini API."""
     return genai.Client(api_key=api_key)
+
+
+def configure_openai(api_key):
+    """Configure OpenAI API."""
+    return OpenAI(api_key=api_key)
 
 
 def load_checkpoint():
@@ -73,15 +82,16 @@ def load_rejection_rules():
     return ""
 
 
-def summarize_rejection(client, flashcards, conversation_text, user_feedback=None, existing_rules=None):
+def summarize_rejection(client, flashcards, conversation_text, use_openai=False, user_feedback=None, existing_rules=None):
     """
-    Ask Gemini to summarize why the user rejected these flashcards.
+    Ask the AI to summarize why the user rejected these flashcards.
     Returns a short rule/tip about what NOT to create flashcards for.
     
     Args:
-        client: Gemini client
+        client: Gemini or OpenAI client
         flashcards: List of rejected flashcard dicts
         conversation_text: The source conversation text
+        use_openai: Whether to use OpenAI instead of Gemini
         user_feedback: Optional user-provided reason for rejection
         existing_rules: Optional string of existing rejection rules to avoid duplicates
     """
@@ -132,8 +142,15 @@ Example: "Don't create flashcards for basic Git commands like 'git status' or 'g
 """
 
     try:
-        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
-        return response.text.strip()
+        if use_openai:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content.strip()
+        else:
+            response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
+            return response.text.strip()
     except Exception as e:
         print(f"Error summarizing rejection: {e}")
         return None
@@ -148,9 +165,9 @@ def save_rejection_rule(rule):
         f.write(f"- {rule}\n")
 
 
-def analyze_conversation(client, conversation_text):
+def analyze_conversation(client, conversation_text, use_openai=False):
     """
-    Ask Gemini to analyze the conversation and create flashcards if worthwhile.
+    Ask the AI to analyze the conversation and create flashcards if worthwhile.
     Returns a dict with 'has_value' (bool) and 'flashcards' (list).
     """
     # Load any existing rejection rules
@@ -200,8 +217,15 @@ Only create flashcards if the information is genuinely useful to remember.
 """
 
     try:
-        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
-        response_text = response.text.strip()
+        if use_openai:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            response_text = response.choices[0].message.content.strip()
+        else:
+            response = client.models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
+            response_text = response.text.strip()
 
         # Remove markdown code blocks if present
         if response_text.startswith('```json'):
@@ -294,22 +318,28 @@ def confirm_flashcards(flashcards, conversation_name):
     return False, feedback if feedback else None
 
 
-def process_conversation(client, conversation, deck_name):
+def process_conversation(client, conversation, deck_name, use_openai=False, force_mode=False):
     """Process a single conversation and return count of flashcards added."""
     print(f"\n  Analyzing: {conversation['name']}")
 
-    analysis = analyze_conversation(client, conversation['text'])
+    analysis = analyze_conversation(client, conversation['text'], use_openai=use_openai)
 
     if not (analysis.get('has_value') and analysis.get('flashcards')):
         print("    No valuable information found")
         return 0
 
     flashcards = analysis['flashcards']
-    accepted, feedback = confirm_flashcards(flashcards, conversation['name'])
+    
+    # In force mode, skip confirmation
+    if force_mode:
+        accepted, feedback = True, None
+    else:
+        accepted, feedback = confirm_flashcards(flashcards, conversation['name'])
+    
     if not accepted:
         print("    Learning from rejection...")
         existing_rules = load_rejection_rules()
-        rule = summarize_rejection(client, flashcards, conversation['text'], user_feedback=feedback, existing_rules=existing_rules)
+        rule = summarize_rejection(client, flashcards, conversation['text'], use_openai=use_openai, user_feedback=feedback, existing_rules=existing_rules)
         if rule:
             save_rejection_rule(rule)
             print(f"    📝 Added rule: {rule}")
@@ -325,7 +355,32 @@ def process_conversation(client, conversation, deck_name):
     return added
 
 
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Process AI conversations and create Anki flashcards."
+    )
+    parser.add_argument(
+        "-openai",
+        action="store_true",
+        help="Use OpenAI (GPT-4o) instead of Gemini for analysis"
+    )
+    parser.add_argument(
+        "-f",
+        action="store_true",
+        help="Force mode: add cards without approval to 'AI Conversations Unfiltered' deck"
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    use_openai = args.openai
+    force_mode = args.f
+    
+    # Determine which deck to use
+    deck_name = DECK_NAME_UNFILTERED if force_mode else DECK_NAME
+    
     # Check if Anki is running first
     print("Checking if Anki is running...")
     if not check_anki_running():
@@ -334,17 +389,29 @@ def main():
         return
     print("✓ Anki is running")
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: GEMINI_API_KEY environment variable not set.")
-        print("Create a .env file with: GEMINI_API_KEY=your_api_key_here")
-        return
+    # Configure the appropriate AI client
+    if use_openai:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Error: OPENAI_API_KEY environment variable not set.")
+            print("Create a .env file with: OPENAI_API_KEY=your_api_key_here")
+            return
+        print("Configuring OpenAI...")
+        client = configure_openai(api_key)
+    else:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("Error: GEMINI_API_KEY environment variable not set.")
+            print("Create a .env file with: GEMINI_API_KEY=your_api_key_here")
+            return
+        print("Configuring Gemini...")
+        client = configure_gemini(api_key)
 
-    print("Configuring Gemini...")
-    client = configure_gemini(api_key)
-
-    print(f"Ensuring deck '{DECK_NAME}' exists...")
-    ensure_deck_exists(DECK_NAME)
+    print(f"Ensuring deck '{deck_name}' exists...")
+    ensure_deck_exists(deck_name)
+    
+    if force_mode:
+        print("⚡ Force mode enabled - cards will be added without approval")
 
     # Gather all conversations from all sources
     all_conversations = []
@@ -381,7 +448,7 @@ def main():
             continue
         
         print(f"\n[{i + 1}/{len(all_conversations)}] {conv['tag']}: {conv['name']}")
-        total_added += process_conversation(client, conv, DECK_NAME)
+        total_added += process_conversation(client, conv, deck_name, use_openai=use_openai, force_mode=force_mode)
         
         # Save checkpoint after each conversation
         save_checkpoint(i + 1, total_added)
