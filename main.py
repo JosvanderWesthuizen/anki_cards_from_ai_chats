@@ -249,14 +249,29 @@ Only create flashcards if the information is genuinely useful to remember.
     if response_text.endswith('```'):
         response_text = response_text[:-3]
 
-    # Extract JSON object by finding the first { and last }
+    # Extract JSON object by finding the first complete JSON object
     response_text = response_text.strip()
     start_idx = response_text.find('{')
-    end_idx = response_text.rfind('}')
-    if start_idx != -1 and end_idx != -1:
+    if start_idx != -1:
+        # Find the matching closing brace
+        brace_count = 0
+        end_idx = start_idx
+        for i, char in enumerate(response_text[start_idx:], start=start_idx):
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
         response_text = response_text[start_idx:end_idx + 1]
 
-    return json.loads(response_text)
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse JSON response: {e}")
+        print(f"Raw response (first 500 chars): {response_text[:500]}")
+        raise
 
 
 def ankiconnect_request(action, **params):
