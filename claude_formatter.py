@@ -28,16 +28,18 @@ def format_conversation(conversation):
 def get_conversations(data_path):
     """Get all Claude conversations from the data path."""
     claude_path = Path(data_path) / "claude"
-    conversation_files = list(claude_path.glob("*/conversations.json"))
+    conversations_file = claude_path / "conversations.json"
+
+    if not conversations_file.exists():
+        return []
 
     conversations = []
-    for file_path in conversation_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            convs = json.load(f)
-            for conv in convs:
-                conversations.append({
-                    'name': conv['name'],
-                    'text': format_conversation(conv),
-                    'tag': 'claude'
-                })
+    with open(conversations_file, 'r', encoding='utf-8') as f:
+        convs = json.load(f)
+        for conv in convs:
+            conversations.append({
+                'name': conv.get('name', 'Untitled'),
+                'text': format_conversation(conv),
+                'tag': 'claude'
+            })
     return conversations
